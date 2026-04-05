@@ -1,0 +1,50 @@
+services:
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+    networks:
+      - avs-net
+
+  avs-sensors-emulator:
+    build:
+      context: ./avs-sensors-emulator
+      dockerfile: Dockerfile
+    container_name: avs-sensors-emulator
+    depends_on:
+      mqtt-broker:
+        condition: service_started
+    environment:
+      MQTT_HOST: mqtt-broker
+      MQTT_PORT: 1883
+      MQTT_TOPIC: avs/sensors/readings
+
+      DEVICE_COUNT: 2
+      DEVICE_PREFIX: sensor_
+
+      BACKFILL_ENABLED: "false"
+      BACKFILL_FROM_YEAR: 2026
+      BACKFILL_INTERVAL_SEC: 3600
+
+      REALTIME_INTERVAL_SEC: 10
+    restart: unless-stopped
+    networks:
+      - avs-net
+
+  mqttx-web:
+    image: emqx/mqttx-web:latest
+    container_name: mqttx-web
+    ports:
+      - "8086:80"
+    restart: unless-stopped
+    networks:
+      - avs-net
+
+networks:
+  avs-net:
+    external: true
