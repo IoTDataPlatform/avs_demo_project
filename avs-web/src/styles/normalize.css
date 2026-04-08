@@ -88,15 +88,15 @@ input {
   cursor: pointer;
 }
 
-:where([fill]:not([fill="none"], [fill^="url"])) {
+svg.lucide :where([fill]:not([fill="none"], [fill^="url"])) {
   fill: currentColor;
 }
 
-:where([stroke]:not([stroke="none"], [stroke^="url"])) {
+svg.lucide :where([stroke]:not([stroke="none"], [stroke^="url"])) {
   stroke: currentColor;
 }
 
-svg * {
+svg.lucide * {
   transition-property: fill, stroke;
 }
 
