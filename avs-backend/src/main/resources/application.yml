@@ -1,0 +1,23 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: avs-backend
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 2s
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/avs}
+    username: ${SPRING_DATASOURCE_USERNAME:avs}
+    password: ${SPRING_DATASOURCE_PASSWORD:avs}
+    driver-class-name: org.postgresql.Driver
+
+app:
+  redis:
+    keyspace: ${APP_REDIS_KEYSPACE:room-current}
+  sensor:
+    offline-after: ${APP_SENSOR_OFFLINE_AFTER:PT2M}

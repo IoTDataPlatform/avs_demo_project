@@ -74,6 +74,8 @@ services:
         condition: service_healthy
       kafka-schema-registry:
         condition: service_healthy
+      redis:
+        condition: service_started
     ports:
       - "8083:8083"
     environment:
@@ -131,8 +133,62 @@ services:
     networks:
       - avs-net
 
+  redis:
+    image: redis:7.4
+    container_name: redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - avs-net
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    hostname: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: avs
+      POSTGRES_USER: avs
+      POSTGRES_PASSWORD: avs
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - avs-net
+
+  backend:
+    build:
+      context: ../avs-backend
+      dockerfile: Dockerfile
+    container_name: avs-backend
+    hostname: avs-backend
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      APP_REDIS_KEYSPACE: room-current
+      APP_SENSOR_OFFLINE_AFTER: PT2M
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/avs
+      SPRING_DATASOURCE_USERNAME: avs
+      SPRING_DATASOURCE_PASSWORD: avs
+    restart: unless-stopped
+    networks:
+      - avs-net
+
 volumes:
   kafka-data:
+  postgres-data:
 
 networks:
   avs-net:
