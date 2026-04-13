@@ -12,7 +12,7 @@ emulation-logs:
 .PHONY: platform-up platform-down platform-logs
 
 platform-up:
-	docker compose -f ../platform/docker-compose.yml up -d
+	docker compose -f ../platform/docker-compose.yml up -d --build
 
 platform-down:
 	docker compose -f ../platform/docker-compose.yml down -v
@@ -20,12 +20,23 @@ platform-down:
 platform-logs:
 	docker compose -f ../platform/docker-compose.yml logs -f
 
-.PHONY: connectors-up
+.PHONY: connectors-up, connectors-status
 
 connectors-up:
 	curl -X POST http://localhost:8083/connectors \
 		-H "Content-Type: application/json" \
 		-d @../platform/configs/mqtt-avs-sensors-source.json
+	curl -X POST http://localhost:8083/connectors \
+    	-H "Content-Type: application/json" \
+    	-d @../platform/configs/avs-room-current-redis-sink.json
+	curl -X POST http://localhost:8083/connectors \
+		-H "Content-Type: application/json" \
+		-d @../platform/configs/avs-postgres-sink.json
+
+connectors-status:
+	curl http://localhost:8083/connectors/mqtt-avs-sensors-source/status
+	curl http://localhost:8083/connectors/avs-room-current-redis-sink/status
+	curl http://localhost:8083/connectors/avs-postgres-sink/status
 
 .PHONY: create-net, delete-net
 
