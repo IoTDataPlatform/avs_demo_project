@@ -245,8 +245,7 @@ export async function fetchPeakHoursMock(
   })
 }
 
-/**
- * Заглушка: `GET /rooms` */
+/** Заглушка: `GET /rooms` */
 export async function fetchRoomsMock(buildingId?: string): Promise<RoomsResponse> {
   const rooms = Object.entries(ROOM_META).map(([id, m]) => {
     const seed = hashRoom(id)
