@@ -2,18 +2,18 @@ import {ArrowLeft} from "lucide-react"
 import {useEffect, useMemo, useState} from "react"
 import {Link, useParams} from "react-router-dom"
 
-import {getRoomAggregates, getRoomCurrent, getRoomSeries, getRoomStats,} from "@/api/client"
-import type {RoomAggregatesResponse, RoomCurrentResponse, SeriesPointDto, SeriesStep, StatsResponse,} from "@/api/types"
-import {AggregatesTable} from "@/components/common/AggregatesTable"
+import {getSensorCurrent, getSensorSeries, getSensorStats,} from "@/api/client"
+import type {SensorCurrentResponse, SeriesPointDto, SeriesStep, StatsResponse,} from "@/api/types"
 import {MetricSnapshotCards} from "@/components/common/MetricSnapshotCards"
 import {SeriesChartsPanel} from "@/components/common/SeriesChartsPanel"
 import {StatsPanel} from "@/components/common/StatsPanel"
 import {StatusBadge} from "@/components/common/StatusBadge"
 import {Button} from "@/components/ui/button"
+import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card"
 import {rangeForDays} from "@/lib/dateRange"
 
-export function RoomDetailPage() {
-    const {roomKey = ""} = useParams()
+export function SensorDetailPage() {
+    const {sensorId = ""} = useParams()
 
     const initialRange = useMemo(() => rangeForDays(7), [])
     const [from, setFrom] = useState(initialRange.from)
@@ -23,35 +23,28 @@ export function RoomDetailPage() {
     const [queryTo, setQueryTo] = useState(initialRange.to)
     const [queryStep, setQueryStep] = useState<SeriesStep>("hour")
 
-    const [current, setCurrent] = useState<RoomCurrentResponse | null>(null)
-    const [aggregates, setAggregates] = useState<RoomAggregatesResponse | null>(null)
+    const [current, setCurrent] = useState<SensorCurrentResponse | null>(null)
     const [stats, setStats] = useState<StatsResponse | null>(null)
     const [points, setPoints] = useState<SeriesPointDto[]>([])
 
     useEffect(() => {
-        if (!roomKey) return
-        void Promise.all([
-            getRoomCurrent(roomKey),
-            getRoomAggregates(roomKey),
-        ]).then(([currentData, aggregatesData]) => {
-            setCurrent(currentData)
-            setAggregates(aggregatesData)
-        })
-    }, [roomKey])
+        if (!sensorId) return
+        void getSensorCurrent(sensorId).then(setCurrent)
+    }, [sensorId])
 
     useEffect(() => {
-        if (!roomKey) return
+        if (!sensorId) return
         void Promise.all([
-            getRoomStats(roomKey, queryFrom, queryTo),
-            getRoomSeries(roomKey, queryFrom, queryTo, queryStep),
+            getSensorStats(sensorId, queryFrom, queryTo),
+            getSensorSeries(sensorId, queryFrom, queryTo, queryStep),
         ]).then(([statsData, seriesData]) => {
             setStats(statsData)
             setPoints(seriesData.points)
         })
-    }, [roomKey, queryFrom, queryTo, queryStep])
+    }, [sensorId, queryFrom, queryTo, queryStep])
 
-    if (!roomKey) {
-        return <div className="p-6">Нет roomKey</div>
+    if (!sensorId) {
+        return <div className="p-6">Нет sensorId</div>
     }
 
     return (
@@ -68,12 +61,10 @@ export function RoomDetailPage() {
             {current ? (
                 <>
                     <header className="space-y-2">
-                        <h1 className="text-3xl font-semibold">
-                            Комната {current.roomNumber}
-                        </h1>
+                        <h1 className="text-3xl font-semibold">{current.sensorId}</h1>
                         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                             <span>{current.buildingName}</span>
-                            <span>sensor: {current.sensorId}</span>
+                            <span>ауд. {current.roomNumber}</span>
                             <span>{new Date(current.ts).toLocaleString("ru-RU")}</span>
                             <StatusBadge status={current.overallAirStatus}/>
                         </div>
@@ -87,18 +78,24 @@ export function RoomDetailPage() {
                         temperatureStatus={current.temperatureStatus}
                         humidityStatus={current.humidityStatus}
                     />
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Привязка</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Link
+                                to={`/rooms/${encodeURIComponent(current.roomKey)}`}
+                                className="text-primary underline underline-offset-4"
+                            >
+                                Перейти к комнате {current.roomKey}
+                            </Link>
+                        </CardContent>
+                    </Card>
                 </>
             ) : (
                 <div>Загрузка текущих данных…</div>
             )}
-
-            {aggregates ? (
-                <AggregatesTable
-                    avg1m={aggregates.avg1m}
-                    avg1h={aggregates.avg1h}
-                    avg1d={aggregates.avg1d}
-                />
-            ) : null}
 
             <SeriesChartsPanel
                 from={from}

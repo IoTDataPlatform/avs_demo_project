@@ -1,43 +1,39 @@
 openapi: 3.0.3
 info:
-  title: AVS IoT Data Platform — Frontend API
-  description: |
-    REST API для отображения данных с CO₂-датчиков.
-
-    ### Параметры окружающей среды и пороговые значения
-    | Параметр       | Норма          | Предупреждение        | Критично          |
-    |----------------|----------------|-----------------------|-------------------|
-    | CO₂ (ppm)      | < 800          | 800–1000              | > 1000            |
-    | Температура °C | 18–26          | 16–18 или 26–28       | < 16 или > 28     |
-    | Влажность %    | 30–70          | 20–30 или 70–80       | < 20 или > 80     |
+  title: AVS Backend API
   version: 1.0.0
-  contact:
-    name: IoT Data Platform
 
 servers:
-  - url: http://localhost:8080/api
-    description: Development
+  - url: http://localhost:8084/api
 
 tags:
-  - name: Navigation
-    description: Здания и аудитории
-  - name: Realtime
-    description: Текущие показания датчиков
-  - name: History
-    description: Исторические временные ряды
-  - name: Analytics
-    description: Статистика и аналитика за период
+  - name: Overview
+  - name: Directory
+  - name: Rooms
+  - name: Sensors
 
 paths:
-  # ──────────────────────────────────────────────
-  # NAVIGATION
-  # ──────────────────────────────────────────────
+  /overview:
+    get:
+      tags: [Overview]
+      operationId: getOverview
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /buildings:
     get:
-      tags: [Navigation]
-      summary: Список зданий
-      description: Возвращает список всех зданий, где установлены датчики.
+      tags: [Directory]
       operationId: getBuildings
       responses:
         "200":
@@ -46,27 +42,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BuildingsResponse"
-              example:
-                buildings:
-                  - id: "bld_main"
-                    name: "Главный корпус"
-                  - id: "bld_lab"
-                    name: "Лабораторный корпус"
 
   /rooms:
     get:
-      tags: [Navigation]
-      summary: Список аудиторий с текущим статусом
-      description: Возвращает все аудитории с последними показаниями датчиков. Можно отфильтровать по ID здания.
+      tags: [Directory]
       operationId: getRooms
       parameters:
         - name: buildingId
           in: query
-          description: ID здания для фильтрации
           required: false
           schema:
             type: string
-            example: "bld_main"
+            example: bld_main
       responses:
         "200":
           description: OK
@@ -74,178 +61,108 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RoomsResponse"
-              example:
-                rooms:
-                  - id: "room_2128"
-                    buildingId: "bld_main"
-                    buildingName: "Главный корпус"
-                    roomNumber: "2128"
-                    sensorId: "sensor_75"
-                    sensorStatus: "online"
-                    lastTs: "2026-04-15T23:00:00Z"
-                    co2: 440
-                    temperature: 19
-                    humidity: 64
-                    overallStatus: "normal"
-                  - id: "room_2123"
-                    buildingId: "bld_main"
-                    buildingName: "Главный корпус"
-                    roomNumber: "2123"
-                    sensorId: "sensor_12"
-                    sensorStatus: "online"
-                    lastTs: "2026-04-15T23:00:00Z"
-                    co2: 1050
-                    temperature: 24
-                    humidity: 45
-                    overallStatus: "critical"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
-  # ──────────────────────────────────────────────
-  # REALTIME
-  # ──────────────────────────────────────────────
-
-  /rooms/{roomId}/current:
+  /rooms/{roomKey}/sensors:
     get:
-      tags: [Realtime]
-      summary: Текущие показания датчика в аудитории
-      description: Возвращает последний пакет данных с датчика по ID аудитории.
-      operationId: getRoomCurrent
+      tags: [Directory]
+      operationId: getRoomSensors
       parameters:
-        - $ref: "#/components/parameters/roomId"
+        - $ref: "#/components/parameters/roomKey"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CurrentReadingResponse"
-              example:
-                sensorId: "sensor_75"
-                roomId: "room_2128"
-                buildingName: "Главный корпус"
-                roomNumber: "2128"
-                ts: "2026-04-15T23:00:00Z"
-                co2: 440
-                temperature: 19
-                humidity: 64
-                sensorStatus: "online"
-                co2Status: "normal"
-                temperatureStatus: "normal"
-                humidityStatus: "normal"
-        "404":
-          description: Аудитория не найдена
+                $ref: "#/components/schemas/SensorsResponse"
+        "400":
+          description: Bad request
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  # ──────────────────────────────────────────────
-  # HISTORY
-  # ──────────────────────────────────────────────
-
-  /rooms/{roomId}/history:
+  /rooms/{roomKey}/current:
     get:
-      tags: [History]
-      summary: Исторические данные аудитории
-      description: |
-        Возвращает исторические данные. 
-        Параметр `interval` управляет агрегацией:
-        - `raw` — все сырые записи без агрегации
-        - `1h` — среднее за каждый час
-        - `1d` — среднее за каждый день
-
-        Используется для построения линейных графиков на странице аудитории.
-      operationId: getRoomHistory
+      tags: [Rooms]
+      operationId: getRoomCurrent
       parameters:
-        - $ref: "#/components/parameters/roomId"
+        - $ref: "#/components/parameters/roomKey"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomCurrentResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rooms/{roomKey}/aggregates:
+    get:
+      tags: [Rooms]
+      operationId: getRoomAggregates
+      parameters:
+        - $ref: "#/components/parameters/roomKey"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomAggregatesResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rooms/{roomKey}/series:
+    get:
+      tags: [Rooms]
+      operationId: getRoomSeries
+      parameters:
+        - $ref: "#/components/parameters/roomKey"
         - $ref: "#/components/parameters/from"
         - $ref: "#/components/parameters/to"
-        - name: interval
+        - name: step
           in: query
-          description: Шаг агрегации данных
           required: false
           schema:
             type: string
-            enum: [raw, 1h, 1d]
-            default: 1h
-        - name: limit
-          in: query
-          description: Максимальное количество возвращаемых точек (защита от перегрузки памяти)
-          required: false
-          schema:
-            type: integer
-            default: 1000
-        - name: offset
-          in: query
-          description: Смещение для пагинации
-          required: false
-          schema:
-            type: integer
-            default: 0
+            enum: [minute, hour, day, month]
+            default: hour
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HistoryResponse"
-              example:
-                roomId: "room_2128"
-                from: "2026-04-15T00:00:00Z"
-                to: "2026-04-15T23:59:59Z"
-                interval: "1h"
-                limit: 1000
-                offset: 0
-                total: 24
-                data:
-                  - ts: "2026-04-15T19:00:00Z"
-                    co2: 740
-                    temperature: 23
-                    humidity: 55
-                  - ts: "2026-04-15T20:00:00Z"
-                    co2: 650
-                    temperature: 22
-                    humidity: 58
-                  - ts: "2026-04-15T21:00:00Z"
-                    co2: 560
-                    temperature: 21
-                    humidity: 60
-                  - ts: "2026-04-15T22:00:00Z"
-                    co2: 490
-                    temperature: 20
-                    humidity: 62
-                  - ts: "2026-04-15T23:00:00Z"
-                    co2: 440
-                    temperature: 19
-                    humidity: 64
+                $ref: "#/components/schemas/SeriesResponse"
         "400":
-          description: Неверные параметры запроса
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
-          description: Аудитория не найдена
+          description: Bad request
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  # ──────────────────────────────────────────────
-  # ANALYTICS
-  # ──────────────────────────────────────────────
-
-  /rooms/{roomId}/stats:
+  /rooms/{roomKey}/stats:
     get:
-      tags: [Analytics]
-      summary: Статистика аудитории за период
-      description: |
-        Возвращает сводную статистику по каждому параметру за указанный период:
-        среднее, медиану, минимум, максимум и процент времени в пределах нормы.
-
-        `percentInNorm` вычисляется как доля измерений, попавших в нормальный диапазон (см. пороговые значения в описании API).
+      tags: [Rooms]
       operationId: getRoomStats
       parameters:
-        - $ref: "#/components/parameters/roomId"
+        - $ref: "#/components/parameters/roomKey"
         - $ref: "#/components/parameters/from"
         - $ref: "#/components/parameters/to"
       responses:
@@ -255,108 +172,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StatsResponse"
-              example:
-                roomId: "room_2128"
-                buildingName: "Главный корпус"
-                roomNumber: "2128"
-                period:
-                  from: "2026-04-01T00:00:00Z"
-                  to: "2026-04-15T23:59:59Z"
-                co2:
-                  avg: 530
-                  median: 510
-                  min: 390
-                  max: 1100
-                  percentInNorm: 78.5
-                temperature:
-                  avg: 21.3
-                  median: 21.0
-                  min: 17.0
-                  max: 26.5
-                  percentInNorm: 91.0
-                humidity:
-                  avg: 55.2
-                  median: 56.0
-                  min: 38.0
-                  max: 73.0
-                  percentInNorm: 85.3
         "400":
-          description: Неверные параметры запроса
+          description: Bad request
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Аудитория не найдена
+          description: Not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /analytics/peak-hours:
+  /sensors/{sensorId}/current:
     get:
-      tags: [Analytics]
-      summary: Часы пиковых значений CO₂ в аудитории
-      operationId: getPeakHours
+      tags: [Sensors]
+      operationId: getSensorCurrent
       parameters:
-        - name: roomId
+        - $ref: "#/components/parameters/sensorId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensorCurrentResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sensors/{sensorId}/series:
+    get:
+      tags: [Sensors]
+      operationId: getSensorSeries
+      parameters:
+        - $ref: "#/components/parameters/sensorId"
+        - $ref: "#/components/parameters/from"
+        - $ref: "#/components/parameters/to"
+        - name: step
           in: query
-          required: true
+          required: false
           schema:
             type: string
-            example: "room_2128"
-        - $ref: "#/components/parameters/from"
-        - $ref: "#/components/parameters/to"
+            enum: [minute, hour, day, month]
+            default: hour
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PeakHoursResponse"
-              example:
-                roomId: "room_2128"
-                period:
-                  from: "2026-04-01T00:00:00Z"
-                  to: "2026-04-15T23:59:59Z"
-                hourlyAvgCo2:
-                  - hour: 8
-                    avgCo2: 420
-                  - hour: 9
-                    avgCo2: 720
-                  - hour: 10
-                    avgCo2: 980
-                  - hour: 11
-                    avgCo2: 1050
-                  - hour: 12
-                    avgCo2: 870
-                  - hour: 13
-                    avgCo2: 530
+                $ref: "#/components/schemas/SeriesResponse"
         "400":
-          description: Неверные параметры запроса
+          description: Bad request
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /analytics/compare:
+  /sensors/{sensorId}/stats:
     get:
-      tags: [Analytics]
-      summary: Сравнение нескольких аудиторий за период
-      description: Сравнение по массиву `roomIds`. Формат в URL будет выглядеть как `?roomIds=room_1,room_2`.
-      operationId: compareRooms
+      tags: [Sensors]
+      operationId: getSensorStats
       parameters:
-        - name: roomIds
-          in: query
-          required: true
-          description: Массив ID аудиторий
-          style: form
-          explode: false
-          schema:
-            type: array
-            items:
-              type: string
-            example: ["room_2128", "room_2123"]
+        - $ref: "#/components/parameters/sensorId"
         - $ref: "#/components/parameters/from"
         - $ref: "#/components/parameters/to"
       responses:
@@ -365,53 +248,42 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CompareResponse"
-              example:
-                period:
-                  from: "2026-04-01T00:00:00Z"
-                  to: "2026-04-15T23:59:59Z"
-                rooms:
-                  - roomId: "room_2128"
-                    buildingName: "Главный корпус"
-                    roomNumber: "2128"
-                    co2Avg: 530
-                    co2PercentInNorm: 78.5
-                    temperatureAvg: 21.3
-                    humidityAvg: 55.2
-                  - roomId: "room_2123"
-                    buildingName: "Главный корпус"
-                    roomNumber: "2123"
-                    co2Avg: 980
-                    co2PercentInNorm: 42.1
-                    temperatureAvg: 23.5
-                    humidityAvg: 48.7
+                $ref: "#/components/schemas/StatsResponse"
         "400":
-          description: Неверные параметры запроса
+          description: Bad request
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-
-# ──────────────────────────────────────────────
-# COMPONENTS
-# ──────────────────────────────────────────────
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   parameters:
-    roomId:
-      name: roomId
+    roomKey:
+      name: roomKey
       in: path
       required: true
-      description: Уникальный ID аудитории
       schema:
         type: string
-        example: "room_2128"
+        example: Rectorate|412
+
+    sensorId:
+      name: sensorId
+      in: path
+      required: true
+      schema:
+        type: string
+        example: sensor_282
 
     from:
       name: from
       in: query
       required: true
-      description: Начало периода
       schema:
         type: string
         format: date-time
@@ -421,254 +293,414 @@ components:
       name: to
       in: query
       required: true
-      description: Конец периода
       schema:
         type: string
         format: date-time
-        example: "2026-04-15T23:59:59Z"
+        example: "2026-04-19T23:59:59Z"
 
   schemas:
-    SensorStatus:
-      type: string
-      enum: [online, offline, malfunctioned]
-
-    OverallStatus:
-      type: string
-      enum: [normal, warning, critical]
-
-    ParamStatus:
-      type: string
-      enum: [normal, warning, critical]
-
-    Building:
+    ErrorResponse:
       type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    BuildingDto:
+      type: object
+      required: [id, name]
       properties:
         id:
           type: string
-          example: "bld_main"
+          example: bld_rectorate
         name:
           type: string
-          example: "Главный корпус"
+          example: Rectorate
 
     BuildingsResponse:
       type: object
+      required: [buildings]
       properties:
         buildings:
           type: array
           items:
-            $ref: "#/components/schemas/Building"
+            $ref: "#/components/schemas/BuildingDto"
 
-    RoomSummary:
+    ParamStatus:
+      type: string
+      enum: [normal, warning, critical, excellent]
+
+    OverallStatus:
+      type: string
+      enum: [normal, warning, critical, excellent]
+
+    RoomCardDto:
       type: object
+      required:
+        - roomKey
+        - buildingId
+        - buildingName
+        - roomNumber
+        - sensorId
+        - ts
+        - co2
+        - temperature
+        - humidity
+        - co2Status
+        - temperatureStatus
+        - humidityStatus
+        - overallAirStatus
       properties:
-        id:
+        roomKey:
           type: string
-          description: Уникальный ID аудитории (для роутинга)
+          example: Rectorate|412
         buildingId:
           type: string
+          example: bld_rectorate
         buildingName:
           type: string
+          example: Rectorate
         roomNumber:
           type: string
+          example: "412"
         sensorId:
           type: string
-        sensorStatus:
-          $ref: "#/components/schemas/SensorStatus"
-        lastTs:
-          type: string
-          format: date-time
-        co2:
-          type: integer
-        temperature:
-          type: number
-          format: float
-        humidity:
-          type: number
-          format: float
-        overallStatus:
-          $ref: "#/components/schemas/OverallStatus"
-
-    RoomsResponse:
-      type: object
-      properties:
-        rooms:
-          type: array
-          items:
-            $ref: "#/components/schemas/RoomSummary"
-
-    CurrentReadingResponse:
-      type: object
-      properties:
-        sensorId:
-          type: string
-        roomId:
-          type: string
-        buildingName:
-          type: string
-        roomNumber:
-          type: string
+          example: sensor_282
         ts:
           type: string
-          format: date-time
         co2:
           type: integer
         temperature:
           type: number
-          format: float
+          format: double
         humidity:
           type: number
-          format: float
-        sensorStatus:
-          $ref: "#/components/schemas/SensorStatus"
+          format: double
         co2Status:
           $ref: "#/components/schemas/ParamStatus"
         temperatureStatus:
           $ref: "#/components/schemas/ParamStatus"
         humidityStatus:
           $ref: "#/components/schemas/ParamStatus"
+        overallAirStatus:
+          $ref: "#/components/schemas/OverallStatus"
 
-    DataPoint:
+    RoomsResponse:
       type: object
+      required: [rooms]
       properties:
-        ts:
-          type: string
-          format: date-time
-        co2:
-          type: number
-          format: float
-        temperature:
-          type: number
-          format: float
-        humidity:
-          type: number
-          format: float
-
-    HistoryResponse:
-      type: object
-      properties:
-        roomId:
-          type: string
-        from:
-          type: string
-          format: date-time
-        to:
-          type: string
-          format: date-time
-        interval:
-          type: string
-          enum: [raw, 1h, 1d]
-        limit:
-          type: integer
-        offset:
-          type: integer
-        total:
-          type: integer
-          description: Общее количество записей, соответствующих запросу (до применения limit/offset)
-        data:
+        rooms:
           type: array
           items:
-            $ref: "#/components/schemas/DataPoint"
+            $ref: "#/components/schemas/RoomCardDto"
 
-    ParamStats:
+    SensorDto:
       type: object
+      required: [sensorId]
       properties:
-        avg:
-          type: number
-          format: float
-        median:
-          type: number
-          format: float
-        min:
-          type: number
-          format: float
-        max:
-          type: number
-          format: float
-        percentInNorm:
-          type: number
-          format: float
+        sensorId:
+          type: string
+          example: sensor_282
 
-    StatsResponse:
+    SensorsResponse:
       type: object
+      required: [roomKey, buildingName, roomNumber, sensors]
       properties:
-        roomId:
+        roomKey:
+          type: string
+          example: Rectorate|412
+        buildingName:
+          type: string
+          example: Rectorate
+        roomNumber:
+          type: string
+          example: "412"
+        sensors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SensorDto"
+
+    GlobalSummaryDto:
+      type: object
+      required:
+        - summaryKey
+        - updatedAt
+        - totalSensorsSeen
+        - onlineSensorsCount
+        - onlineSensorIdsCsv
+        - roomsCo2WarningCount
+        - roomsCo2CriticalCount
+        - roomsTemperatureWarningCount
+        - roomsTemperatureCriticalCount
+        - roomsHumidityWarningCount
+        - roomsHumidityCriticalCount
+      properties:
+        summaryKey:
+          type: string
+          example: global
+        updatedAt:
+          type: string
+        totalSensorsSeen:
+          type: integer
+          format: int64
+        onlineSensorsCount:
+          type: integer
+          format: int64
+        onlineSensorIdsCsv:
+          type: string
+        roomsCo2WarningCount:
+          type: integer
+          format: int64
+        roomsCo2CriticalCount:
+          type: integer
+          format: int64
+        roomsTemperatureWarningCount:
+          type: integer
+          format: int64
+        roomsTemperatureCriticalCount:
+          type: integer
+          format: int64
+        roomsHumidityWarningCount:
+          type: integer
+          format: int64
+        roomsHumidityCriticalCount:
+          type: integer
+          format: int64
+
+    OverviewResponse:
+      type: object
+      required: [summary, onlineRoomsCount, onlineSensorsKeysCount]
+      properties:
+        summary:
+          $ref: "#/components/schemas/GlobalSummaryDto"
+        onlineRoomsCount:
+          type: integer
+          format: int64
+        onlineSensorsKeysCount:
+          type: integer
+          format: int64
+
+    RoomCurrentResponse:
+      type: object
+      required:
+        - roomKey
+        - buildingName
+        - roomNumber
+        - sensorId
+        - ts
+        - co2
+        - temperature
+        - humidity
+        - co2Status
+        - temperatureStatus
+        - humidityStatus
+        - overallAirStatus
+      properties:
+        roomKey:
           type: string
         buildingName:
           type: string
         roomNumber:
           type: string
-        period:
-          $ref: "#/components/schemas/Period"
-        co2:
-          $ref: "#/components/schemas/ParamStats"
-        temperature:
-          $ref: "#/components/schemas/ParamStats"
-        humidity:
-          $ref: "#/components/schemas/ParamStats"
-
-    PeakHoursResponse:
-      type: object
-      properties:
-        roomId:
+        sensorId:
           type: string
-        period:
-          $ref: "#/components/schemas/Period"
-        hourlyAvgCo2:
-          type: array
-          items:
-            type: object
-            properties:
-              hour:
-                type: integer
-                minimum: 0
-                maximum: 23
-              avgCo2:
-                type: number
-                format: float
+        ts:
+          type: string
+        co2:
+          type: integer
+        temperature:
+          type: number
+          format: double
+        humidity:
+          type: number
+          format: double
+        co2Status:
+          $ref: "#/components/schemas/ParamStatus"
+        temperatureStatus:
+          $ref: "#/components/schemas/ParamStatus"
+        humidityStatus:
+          $ref: "#/components/schemas/ParamStatus"
+        overallAirStatus:
+          $ref: "#/components/schemas/OverallStatus"
 
-    CompareResponse:
+    SensorCurrentResponse:
+      type: object
+      required:
+        - sensorId
+        - roomKey
+        - buildingName
+        - roomNumber
+        - ts
+        - co2
+        - temperature
+        - humidity
+        - co2Status
+        - temperatureStatus
+        - humidityStatus
+        - overallAirStatus
+      properties:
+        sensorId:
+          type: string
+        roomKey:
+          type: string
+        buildingName:
+          type: string
+        roomNumber:
+          type: string
+        ts:
+          type: string
+        co2:
+          type: integer
+        temperature:
+          type: number
+          format: double
+        humidity:
+          type: number
+          format: double
+        co2Status:
+          $ref: "#/components/schemas/ParamStatus"
+        temperatureStatus:
+          $ref: "#/components/schemas/ParamStatus"
+        humidityStatus:
+          $ref: "#/components/schemas/ParamStatus"
+        overallAirStatus:
+          $ref: "#/components/schemas/OverallStatus"
+
+    AggregateSnapshotDto:
       type: object
       properties:
         period:
-          $ref: "#/components/schemas/Period"
-        rooms:
+          type: string
+          example: 1h
+        roomKey:
+          type: string
+        buildingName:
+          type: string
+        roomNumber:
+          type: string
+        windowStart:
+          type: string
+        windowEnd:
+          type: string
+        co2Avg:
+          type: number
+          format: double
+        temperatureAvg:
+          type: number
+          format: double
+        humidityAvg:
+          type: number
+          format: double
+        co2Status:
+          $ref: "#/components/schemas/ParamStatus"
+        temperatureStatus:
+          $ref: "#/components/schemas/ParamStatus"
+        humidityStatus:
+          $ref: "#/components/schemas/ParamStatus"
+        overallAirStatus:
+          $ref: "#/components/schemas/OverallStatus"
+
+    RoomAggregatesResponse:
+      type: object
+      required: [roomKey]
+      properties:
+        roomKey:
+          type: string
+        avg1m:
+          $ref: "#/components/schemas/AggregateSnapshotDto"
+        avg1h:
+          $ref: "#/components/schemas/AggregateSnapshotDto"
+        avg1d:
+          $ref: "#/components/schemas/AggregateSnapshotDto"
+
+    SeriesPointDto:
+      type: object
+      required: [bucket, co2Avg, temperatureAvg, humidityAvg]
+      properties:
+        bucket:
+          type: string
+        co2Avg:
+          type: number
+          format: double
+        temperatureAvg:
+          type: number
+          format: double
+        humidityAvg:
+          type: number
+          format: double
+
+    SeriesResponse:
+      type: object
+      required: [entityType, entityId, from, to, step, points]
+      properties:
+        entityType:
+          type: string
+          enum: [room, sensor]
+        entityId:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        step:
+          type: string
+          enum: [minute, hour, day, month]
+        points:
           type: array
           items:
-            type: object
-            properties:
-              roomId:
-                type: string
-              buildingName:
-                type: string
-              roomNumber:
-                type: string
-              co2Avg:
-                type: number
-                format: float
-              co2PercentInNorm:
-                type: number
-                format: float
-              temperatureAvg:
-                type: number
-                format: float
-              humidityAvg:
-                type: number
-                format: float
+            $ref: "#/components/schemas/SeriesPointDto"
 
-    Period:
+    MetricStatsDto:
       type: object
+      required: [avg, median, min, max, percentInNorm]
+      properties:
+        avg:
+          type: number
+          format: double
+        median:
+          type: number
+          format: double
+        min:
+          type: number
+          format: double
+        max:
+          type: number
+          format: double
+        percentInNorm:
+          type: number
+          format: double
+
+    PeriodDto:
+      type: object
+      required: [from, to]
       properties:
         from:
           type: string
-          format: date-time
         to:
           type: string
-          format: date-time
 
-    ErrorResponse:
+    StatsResponse:
       type: object
+      required: [entityType, entityId, period, co2, temperature, humidity]
       properties:
-        error:
+        entityType:
           type: string
-        message:
+          enum: [room, sensor]
+        entityId:
           type: string
+        buildingName:
+          type: string
+          nullable: true
+        roomNumber:
+          type: string
+          nullable: true
+        period:
+          $ref: "#/components/schemas/PeriodDto"
+        co2:
+          $ref: "#/components/schemas/MetricStatsDto"
+        temperature:
+          $ref: "#/components/schemas/MetricStatsDto"
+        humidity:
+          $ref: "#/components/schemas/MetricStatsDto"

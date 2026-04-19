@@ -6,7 +6,6 @@ import avsbackend.model.api.SeriesResponse;
 import avsbackend.model.api.StatsResponse;
 import avsbackend.service.RoomService;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 
 @RestController
-@RequestMapping("/api/rooms")
+@RequestMapping("/api")
 public class RoomController {
 
     private final RoomService roomService;
@@ -23,19 +22,19 @@ public class RoomController {
         this.roomService = roomService;
     }
 
-    @GetMapping("/{roomKey}/current")
-    public RoomCurrentResponse getCurrent(@PathVariable String roomKey) {
+    @GetMapping("/room-current")
+    public RoomCurrentResponse getCurrent(@RequestParam String roomKey) {
         return roomService.getCurrent(roomKey);
     }
 
-    @GetMapping("/{roomKey}/aggregates")
-    public RoomAggregatesResponse getAggregates(@PathVariable String roomKey) {
+    @GetMapping("/room-aggregates")
+    public RoomAggregatesResponse getAggregates(@RequestParam String roomKey) {
         return roomService.getAggregates(roomKey);
     }
 
-    @GetMapping("/{roomKey}/series")
+    @GetMapping("/room-series")
     public SeriesResponse getSeries(
-            @PathVariable String roomKey,
+            @RequestParam String roomKey,
             @RequestParam Instant from,
             @RequestParam Instant to,
             @RequestParam(defaultValue = "hour") String step
@@ -43,9 +42,9 @@ public class RoomController {
         return roomService.getSeries(roomKey, from, to, step);
     }
 
-    @GetMapping("/{roomKey}/stats")
+    @GetMapping("/room-stats")
     public StatsResponse getStats(
-            @PathVariable String roomKey,
+            @RequestParam String roomKey,
             @RequestParam Instant from,
             @RequestParam Instant to
     ) {
