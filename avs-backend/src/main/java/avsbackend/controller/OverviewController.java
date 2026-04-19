@@ -1,0 +1,23 @@
+package avsbackend.controller;
+
+import avsbackend.model.api.OverviewResponse;
+import avsbackend.service.OverviewService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api")
+public class OverviewController {
+
+    private final OverviewService overviewService;
+
+    public OverviewController(OverviewService overviewService) {
+        this.overviewService = overviewService;
+    }
+
+    @GetMapping("/overview")
+    public OverviewResponse getOverview() {
+        return overviewService.getOverview();
+    }
+}

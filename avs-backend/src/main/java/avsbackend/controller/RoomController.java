@@ -1,11 +1,10 @@
 package avsbackend.controller;
 
-import avsbackend.exception.NotFoundException;
-import avsbackend.model.api.CurrentReadingResponse;
-import avsbackend.model.api.HistoryResponse;
+import avsbackend.model.api.RoomAggregatesResponse;
+import avsbackend.model.api.RoomCurrentResponse;
+import avsbackend.model.api.SeriesResponse;
 import avsbackend.model.api.StatsResponse;
-import avsbackend.service.RedisCurrentService;
-import avsbackend.service.SensorQueryService;
+import avsbackend.service.RoomService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,38 +17,38 @@ import java.time.Instant;
 @RequestMapping("/api/rooms")
 public class RoomController {
 
-    private final RedisCurrentService redisCurrentService;
-    private final SensorQueryService sensorQueryService;
+    private final RoomService roomService;
 
-    public RoomController(RedisCurrentService redisCurrentService, SensorQueryService sensorQueryService) {
-        this.redisCurrentService = redisCurrentService;
-        this.sensorQueryService = sensorQueryService;
+    public RoomController(RoomService roomService) {
+        this.roomService = roomService;
     }
 
-    @GetMapping("/{roomId}/current")
-    public CurrentReadingResponse getCurrent(@PathVariable String roomId) {
-        return redisCurrentService.getCurrent(roomId)
-                .orElseThrow(() -> new NotFoundException("Room not found"));
+    @GetMapping("/{roomKey}/current")
+    public RoomCurrentResponse getCurrent(@PathVariable String roomKey) {
+        return roomService.getCurrent(roomKey);
     }
 
-    @GetMapping("/{roomId}/history")
-    public HistoryResponse getHistory(
-            @PathVariable String roomId,
+    @GetMapping("/{roomKey}/aggregates")
+    public RoomAggregatesResponse getAggregates(@PathVariable String roomKey) {
+        return roomService.getAggregates(roomKey);
+    }
+
+    @GetMapping("/{roomKey}/series")
+    public SeriesResponse getSeries(
+            @PathVariable String roomKey,
             @RequestParam Instant from,
             @RequestParam Instant to,
-            @RequestParam(defaultValue = "1h") String interval,
-            @RequestParam(defaultValue = "1000") int limit,
-            @RequestParam(defaultValue = "0") int offset
+            @RequestParam(defaultValue = "hour") String step
     ) {
-        return sensorQueryService.getRoomHistory(roomId, from, to, interval, limit, offset);
+        return roomService.getSeries(roomKey, from, to, step);
     }
 
-    @GetMapping("/{roomId}/stats")
+    @GetMapping("/{roomKey}/stats")
     public StatsResponse getStats(
-            @PathVariable String roomId,
+            @PathVariable String roomKey,
             @RequestParam Instant from,
             @RequestParam Instant to
     ) {
-        return sensorQueryService.getRoomStats(roomId, from, to);
+        return roomService.getStats(roomKey, from, to);
     }
 }

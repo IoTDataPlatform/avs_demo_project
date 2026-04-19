@@ -256,10 +256,12 @@ services:
       MQTT_CLIENT_ID: avs-emulator
       MQTT_TOPIC_TEMPLATE: sensors/room{roomNumber}/data
       SENSOR_MAP_FILE: /app/sensor_map.txt
-      BACKFILL_ENABLED: "false"
-      SENSOR_COUNT: 5
-      SENSOR_SELECTION: random
-      REALTIME_INTERVAL_SEC: 5
+      BACKFILL_ENABLED: "true"
+      BACKFILL_FROM_YEAR: "2026"
+      BACKFILL_INTERVAL_SEC: "36000"
+      SENSOR_COUNT: 10
+      SENSOR_SELECTION: first
+      REALTIME_INTERVAL_SEC: 50
       TEMPERATURE_BASE: 43
       HUMIDITY_BASE: 95
       CO2_BASE: 1650
@@ -287,6 +289,35 @@ services:
       CONNECT_URL: http://kafka-connect:8083
     entrypoint: ["/bin/sh", "/init/init.sh"]
     restart: "no"
+
+  avs-backend:
+    build:
+      context: ./avs-backend
+      dockerfile: Dockerfile
+    container_name: avs-backend
+    depends_on:
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://timescaledb:5432/avs
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+
+      APP_REDIS_KEYSPACE_GLOBAL_SUMMARY: avs:summary
+      APP_REDIS_KEYSPACE_ROOM_LATEST: avs:room:latest
+      APP_REDIS_KEYSPACE_ROOM_AVG_1M: avs:room:avg:1m
+      APP_REDIS_KEYSPACE_ROOM_AVG_1H: avs:room:avg:1h
+      APP_REDIS_KEYSPACE_ROOM_AVG_1D: avs:room:avg:1d
+      APP_REDIS_KEYSPACE_SENSOR_LATEST: avs:sensor:latest
+      APP_SENSOR_OFFLINE_AFTER: PT2M
+    ports:
+      - "8084:8084"
+    restart: unless-stopped
 
 volumes:
   kafka-data:

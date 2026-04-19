@@ -4,20 +4,25 @@ server:
 spring:
   application:
     name: avs-backend
+
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      host: ${SPRING_DATA_REDIS_HOST:redis}
       port: ${SPRING_DATA_REDIS_PORT:6379}
       timeout: 2s
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/avs}
-    username: ${SPRING_DATASOURCE_USERNAME:avs}
-    password: ${SPRING_DATASOURCE_PASSWORD:avs}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://timescaledb:5432/avs}
+    username: ${SPRING_DATASOURCE_USERNAME:user}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
 
 app:
   redis:
-    keyspace: ${APP_REDIS_KEYSPACE:room-current}
-  sensor:
-    offline-after: ${APP_SENSOR_OFFLINE_AFTER:PT2M}
+    keyspaces:
+      global-summary: ${APP_REDIS_KEYSPACE_GLOBAL_SUMMARY:avs:summary}
+      room-latest: ${APP_REDIS_KEYSPACE_ROOM_LATEST:avs:room:latest}
+      room-avg-1m: ${APP_REDIS_KEYSPACE_ROOM_AVG_1M:avs:room:avg:1m}
+      room-avg-1h: ${APP_REDIS_KEYSPACE_ROOM_AVG_1H:avs:room:avg:1h}
+      room-avg-1d: ${APP_REDIS_KEYSPACE_ROOM_AVG_1D:avs:room:avg:1d}
+      sensor-latest: ${APP_REDIS_KEYSPACE_SENSOR_LATEST:avs:sensor:latest}
