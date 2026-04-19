@@ -1,0 +1,14 @@
+{
+  "connector.class": "com.redis.kafka.connect.RedisSinkConnector",
+  "tasks.max": "1",
+  "topics": "avs-room-avg-1m",
+
+  "redis.uri": "redis://redis:6379",
+  "redis.type": "HASH",
+  "redis.keyspace": "avs:room:avg:1m",
+  "redis.key.ttl": "-1",
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "io.confluent.connect.avro.AvroConverter",
+  "value.converter.schema.registry.url": "http://kafka-schema-registry:8081"
+}
