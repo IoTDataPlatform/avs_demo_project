@@ -1,0 +1,34 @@
+{
+  "connector.class": "com.datamountaineer.streamreactor.connect.mqtt.source.MqttSourceConnector",
+  "tasks.max": "1",
+
+  "connect.mqtt.hosts": "tcp://mqtt-backfill-broker:1883",
+  "connect.mqtt.client.id": "avs-mqtt-source-backfill",
+  "connect.mqtt.service.quality": "1",
+  "connect.mqtt.timeout": "3000",
+  "connect.mqtt.clean": "true",
+  "connect.mqtt.keep.alive": "60",
+  "connect.mqtt.converter.throw.on.error": "true",
+  "connect.mqtt.log.message": "false",
+
+  "connect.mqtt.kcql": "INSERT INTO `avs-source` SELECT * FROM `sensors/#` WITHCONVERTER=`com.datamountaineer.streamreactor.connect.converters.source.JsonSimpleConverter` WITHKEY(sensorId)",
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "io.confluent.connect.avro.AvroConverter",
+  "value.converter.schema.registry.url": "http://kafka-schema-registry:8081",
+  "value.converter.value.subject.name.strategy": "io.confluent.kafka.serializers.subject.TopicNameStrategy",
+
+  "transforms": "ParseTimestamp,SetValueSchema",
+
+  "transforms.ParseTimestamp.type": "org.apache.kafka.connect.transforms.TimestampConverter$Value",
+  "transforms.ParseTimestamp.field": "ts",
+  "transforms.ParseTimestamp.target.type": "Timestamp",
+  "transforms.ParseTimestamp.format": "yyyy-MM-dd'T'HH:mm:ssX",
+
+  "transforms.SetValueSchema.type": "org.apache.kafka.connect.transforms.SetSchemaMetadata$Value",
+  "transforms.SetValueSchema.schema.name": "dev.miron.avs.Reading",
+
+  "errors.tolerance": "none",
+  "errors.log.enable": "true",
+  "errors.log.include.messages": "true"
+}

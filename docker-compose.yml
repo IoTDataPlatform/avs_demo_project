@@ -149,7 +149,7 @@ services:
     image: redis:7-alpine
     container_name: redis
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -172,7 +172,7 @@ services:
         rest.port: 8081
         parallelism.default: 1
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/overview >/dev/null 2>&1 || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8081/overview >/dev/null 2>&1 || exit 1" ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -235,6 +235,25 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  mqtt-backfill-broker:
+    image: eclipse-mosquitto:2
+    container_name: mqtt-backfill-broker
+    hostname: mqtt-backfill-broker
+    ports:
+      - "1884:1883"
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1 || exit 1"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   mqtt-web:
     image: emqx/mqttx-web:latest
     container_name: mqttx-web
@@ -249,25 +268,38 @@ services:
     depends_on:
       mqtt-broker-healthcheck:
         condition: service_healthy
+      mqtt-backfill-broker:
+        condition: service_healthy
+      connect-init:
+        condition: service_completed_successfully
     environment:
-      MQTT_HOST: 2.26.119.75
-      MQTT_PORT: 1883
+      REALTIME_MQTT_HOST: 2.26.119.75
+      REALTIME_MQTT_PORT: 1883
+      REALTIME_MQTT_CLIENT_ID: avs-emulator-realtime
+
+      BACKFILL_MQTT_HOST: mqtt-backfill-broker
+      BACKFILL_MQTT_PORT: 1883
+      BACKFILL_MQTT_CLIENT_ID: avs-emulator-backfill
+
       MQTT_QOS: 1
-      MQTT_CLIENT_ID: avs-emulator
       MQTT_TOPIC_TEMPLATE: sensors/room{roomNumber}/data
       SENSOR_MAP_FILE: /app/sensor_map.txt
+
       BACKFILL_ENABLED: "true"
       BACKFILL_FROM_YEAR: "2026"
-      BACKFILL_INTERVAL_SEC: "36000"
-      SENSOR_COUNT: 10
+      BACKFILL_INTERVAL_SEC: "360000"
+      SLEEP_AFTER_BACKFILL: "20"
+
+      SENSOR_COUNT: 940
       SENSOR_SELECTION: first
-      REALTIME_INTERVAL_SEC: 50
-      TEMPERATURE_BASE: 43
-      HUMIDITY_BASE: 95
-      CO2_BASE: 1650
-      TEMPERATURE_JITTER: 1.5
-      HUMIDITY_JITTER: 7
-      CO2_JITTER: 80
+      REALTIME_INTERVAL_SEC: 10
+
+      TEMPERATURE_BASE: 20
+      HUMIDITY_BASE: 50
+      CO2_BASE: 700
+      TEMPERATURE_JITTER: 20
+      HUMIDITY_JITTER: 30
+      CO2_JITTER: 500
     volumes:
       - ./mqtt/sensor-emulator/sensor_map.txt:/app/sensor_map.txt:ro
     restart: unless-stopped
@@ -283,11 +315,13 @@ services:
         condition: service_healthy
       mqtt-broker-healthcheck:
         condition: service_healthy
+      mqtt-backfill-broker:
+        condition: service_healthy
     volumes:
       - ./kafka-connect/init:/init:ro
     environment:
       CONNECT_URL: http://kafka-connect:8083
-    entrypoint: ["/bin/sh", "/init/init.sh"]
+    entrypoint: [ "/bin/sh", "/init/init.sh" ]
     restart: "no"
 
   avs-backend:
@@ -314,9 +348,22 @@ services:
       APP_REDIS_KEYSPACE_ROOM_AVG_1H: avs:room:avg:1h
       APP_REDIS_KEYSPACE_ROOM_AVG_1D: avs:room:avg:1d
       APP_REDIS_KEYSPACE_SENSOR_LATEST: avs:sensor:latest
-      APP_SENSOR_OFFLINE_AFTER: PT2M
     ports:
       - "8084:8084"
+    restart: unless-stopped
+
+  avs-web:
+    build:
+      context: ./avs-web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:8084/api
+    container_name: avs-web
+    depends_on:
+      avs-backend:
+        condition: service_started
+    ports:
+      - "3000:80"
     restart: unless-stopped
 
 volumes:

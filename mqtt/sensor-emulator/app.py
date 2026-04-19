@@ -9,14 +9,18 @@ from datetime import datetime, timedelta, timezone
 import paho.mqtt.client as mqtt
 
 
-MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
-MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_QOS = int(os.getenv("MQTT_QOS", "1"))
 MQTT_TOPIC_TEMPLATE = os.getenv("MQTT_TOPIC_TEMPLATE", "sensors/room{roomNumber}/data")
-MQTT_CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "avs-emulator")
 
-MQTT_USERNAME = os.getenv("MQTT_USERNAME")
-MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
+REALTIME_MQTT_HOST = os.getenv("REALTIME_MQTT_HOST", "localhost")
+REALTIME_MQTT_PORT = int(os.getenv("REALTIME_MQTT_PORT", "1883"))
+REALTIME_MQTT_CLIENT_ID = os.getenv("REALTIME_MQTT_CLIENT_ID", "avs-emulator-realtime")
+
+BACKFILL_MQTT_HOST = os.getenv("BACKFILL_MQTT_HOST", REALTIME_MQTT_HOST)
+BACKFILL_MQTT_PORT = int(os.getenv("BACKFILL_MQTT_PORT", str(REALTIME_MQTT_PORT)))
+BACKFILL_MQTT_CLIENT_ID = os.getenv("BACKFILL_MQTT_CLIENT_ID", "avs-emulator-backfill")
+
+SLEEP_AFTER_BACKFILL = int(os.getenv("SLEEP_AFTER_BACKFILL", "10"))
 
 SENSOR_MAP_FILE = os.getenv("SENSOR_MAP_FILE", "/app/sensor_map.txt")
 SENSOR_COUNT = int(os.getenv("SENSOR_COUNT", "1"))
@@ -215,22 +219,19 @@ def generate_payload(device: Device, ts: datetime | None = None) -> dict:
     }
 
 
-def create_client() -> mqtt.Client:
+def create_client(client_id: str) -> mqtt.Client:
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-        client_id=MQTT_CLIENT_ID,
+        client_id=client_id,
     )
-
-    if MQTT_USERNAME:
-        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
     def on_connect(c, userdata, flags, reason_code, properties=None):
         print(f"[connect] connected, reason_code={reason_code}")
         if reason_code == 0:
-            print(f"[connect] broker={MQTT_HOST}:{MQTT_PORT}")
+            print(f"[connect] client_id={client_id}")
 
     def on_disconnect(c, userdata, disconnect_flags, reason_code, properties=None):
-        print(f"[disconnect] reason_code={reason_code}")
+        print(f"[disconnect] client_id={client_id} reason_code={reason_code}")
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
@@ -261,6 +262,15 @@ def publish_payload(client: mqtt.Client, device: Device, payload: dict) -> None:
     else:
         print(f"[publish] topic={topic} payload={payload_json}")
 
+def run_with_client(host: str, port: int, client_id: str, runner) -> None:
+    client = create_client(client_id)
+    connect_with_retry(client, host, port)
+    client.loop_start()
+    try:
+        runner(client)
+    finally:
+        client.loop_stop()
+        client.disconnect()
 
 def run_backfill(client: mqtt.Client, devices: list[Device]) -> None:
     if not BACKFILL_ENABLED:
@@ -316,8 +326,10 @@ def main() -> None:
     all_devices = load_devices_from_map(SENSOR_MAP_FILE)
     devices = select_devices(all_devices)
 
-    print("[config] mqtt_host=", MQTT_HOST)
-    print("[config] mqtt_port=", MQTT_PORT)
+    print("[config] realtime_mqtt_host=", REALTIME_MQTT_HOST)
+    print("[config] realtime_mqtt_port=", REALTIME_MQTT_PORT)
+    print("[config] backfill_mqtt_host=", BACKFILL_MQTT_HOST)
+    print("[config] backfill_mqtt_port=", BACKFILL_MQTT_PORT)
     print("[config] mqtt_qos=", MQTT_QOS)
     print("[config] sensor_map_file=", SENSOR_MAP_FILE)
     print("[config] total_devices_in_map=", len(all_devices))
@@ -325,16 +337,22 @@ def main() -> None:
     print("[config] backfill_enabled=", BACKFILL_ENABLED)
     print("[config] realtime_interval_sec=", REALTIME_INTERVAL_SEC)
 
-    client = create_client()
-    connect_with_retry(client, MQTT_HOST, MQTT_PORT)
-    client.loop_start()
+    if BACKFILL_ENABLED and RUNNING:
+        run_with_client(
+            BACKFILL_MQTT_HOST,
+            BACKFILL_MQTT_PORT,
+            BACKFILL_MQTT_CLIENT_ID,
+            lambda client: run_backfill(client, devices),
+        )
+        time.sleep(SLEEP_AFTER_BACKFILL)
 
-    try:
-        run_backfill(client, devices)
-        run_realtime(client, devices)
-    finally:
-        client.loop_stop()
-        client.disconnect()
+    if RUNNING:
+        run_with_client(
+            REALTIME_MQTT_HOST,
+            REALTIME_MQTT_PORT,
+            REALTIME_MQTT_CLIENT_ID,
+            lambda client: run_realtime(client, devices),
+        )
 
 
 if __name__ == "__main__":
