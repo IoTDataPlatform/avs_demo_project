@@ -227,7 +227,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "mosquitto_sub -h 2.26.119.75 -p 1883 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1 || exit 1"
+          "mosquitto_pub -h nsu-metrics.ru -p 8883 -u avs -P avs --capath /etc/ssl/certs -q 1 -t 'healthcheck/avs' -m 'ok' > /dev/null 2>&1 || exit 1"
         ]
       interval: 10s
       timeout: 5s
@@ -235,24 +235,24 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  mqtt-backfill-broker:
-    image: eclipse-mosquitto:2
-    container_name: mqtt-backfill-broker
-    hostname: mqtt-backfill-broker
-    ports:
-      - "1884:1883"
-    volumes:
-      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1 || exit 1"
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
+#  mqtt-backfill-broker:
+#    image: eclipse-mosquitto:2
+#    container_name: mqtt-backfill-broker
+#    hostname: mqtt-backfill-broker
+#    ports:
+#      - "1884:1883"
+#    volumes:
+#      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+#    healthcheck:
+#      test:
+#        [
+#          "CMD-SHELL",
+#          "mosquitto_sub -h localhost -p 1883 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1 || exit 1"
+#        ]
+#      interval: 5s
+#      timeout: 5s
+#      retries: 10
+#    restart: unless-stopped
 
   mqtt-web:
     image: emqx/mqttx-web:latest
@@ -268,36 +268,42 @@ services:
     depends_on:
       mqtt-broker-healthcheck:
         condition: service_healthy
-      mqtt-backfill-broker:
-        condition: service_healthy
+#      mqtt-backfill-broker:
+#        condition: service_healthy
       connect-init:
         condition: service_completed_successfully
     environment:
-      REALTIME_MQTT_HOST: 2.26.119.75
-      REALTIME_MQTT_PORT: 1883
+      REALTIME_MQTT_HOST: nsu-metrics.ru
+      REALTIME_MQTT_PORT: 8883
       REALTIME_MQTT_CLIENT_ID: avs-emulator-realtime
 
-      BACKFILL_MQTT_HOST: mqtt-backfill-broker
-      BACKFILL_MQTT_PORT: 1883
+      BACKFILL_MQTT_HOST: nsu-metrics.ru
+      BACKFILL_MQTT_PORT: 8883
       BACKFILL_MQTT_CLIENT_ID: avs-emulator-backfill
+
+      MQTT_USERNAME: avs
+      MQTT_PASSWORD: avs
+      MQTT_TLS_ENABLED: "true"
+      MQTT_TLS_INSECURE: "false"
+      MQTT_TLS_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
 
       MQTT_QOS: 1
       MQTT_TOPIC_TEMPLATE: sensors/room{roomNumber}/data
       SENSOR_MAP_FILE: /app/sensor_map.txt
 
-      BACKFILL_ENABLED: "true"
-      BACKFILL_FROM_YEAR: "2026"
-      BACKFILL_INTERVAL_SEC: "360000"
-      SLEEP_AFTER_BACKFILL: "20"
+      BACKFILL_ENABLED: "false"
+#      BACKFILL_FROM_YEAR: "2026"
+#      BACKFILL_INTERVAL_SEC: "360000"
+#      SLEEP_AFTER_BACKFILL: "20"
 
-      SENSOR_COUNT: 940
-      SENSOR_SELECTION: first
-      REALTIME_INTERVAL_SEC: 10
+      SENSOR_COUNT: 40
+      SENSOR_SELECTION: random
+      REALTIME_INTERVAL_SEC: 5
 
       TEMPERATURE_BASE: 20
       HUMIDITY_BASE: 50
       CO2_BASE: 700
-      TEMPERATURE_JITTER: 20
+      TEMPERATURE_JITTER: 10
       HUMIDITY_JITTER: 30
       CO2_JITTER: 500
     volumes:
@@ -315,8 +321,8 @@ services:
         condition: service_healthy
       mqtt-broker-healthcheck:
         condition: service_healthy
-      mqtt-backfill-broker:
-        condition: service_healthy
+#      mqtt-backfill-broker:
+#        condition: service_healthy
     volumes:
       - ./kafka-connect/init:/init:ro
     environment:

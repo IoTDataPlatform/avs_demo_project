@@ -2,14 +2,16 @@
   "connector.class": "com.datamountaineer.streamreactor.connect.mqtt.source.MqttSourceConnector",
   "tasks.max": "1",
 
-  "connect.mqtt.hosts": "tcp://2.26.119.75:1883",
+  "connect.mqtt.hosts": "ssl://nsu-metrics.ru:8883",
+  "connect.mqtt.username": "avs",
+  "connect.mqtt.password": "avs",
   "connect.mqtt.client.id": "avs-mqtt-source",
   "connect.mqtt.service.quality": "1",
   "connect.mqtt.timeout": "3000",
   "connect.mqtt.clean": "true",
   "connect.mqtt.keep.alive": "60",
   "connect.mqtt.converter.throw.on.error": "true",
-  "connect.mqtt.log.message": "false",
+  "connect.mqtt.log.message": "true",
 
   "connect.mqtt.kcql": "INSERT INTO `avs-source` SELECT * FROM `sensors/#` WITHCONVERTER=`com.datamountaineer.streamreactor.connect.converters.source.JsonSimpleConverter` WITHKEY(sensorId)",
 

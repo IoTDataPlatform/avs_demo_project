@@ -2,6 +2,7 @@ import json
 import os
 import random
 import signal
+import ssl
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -9,8 +10,19 @@ from datetime import datetime, timedelta, timezone
 import paho.mqtt.client as mqtt
 
 
+def env_bool(name: str, default: str = "false") -> bool:
+    return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 MQTT_QOS = int(os.getenv("MQTT_QOS", "1"))
 MQTT_TOPIC_TEMPLATE = os.getenv("MQTT_TOPIC_TEMPLATE", "sensors/room{roomNumber}/data")
+MQTT_KEEPALIVE = int(os.getenv("MQTT_KEEPALIVE", "60"))
+
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "").strip()
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "")
+MQTT_TLS_ENABLED = env_bool("MQTT_TLS_ENABLED", "false")
+MQTT_TLS_INSECURE = env_bool("MQTT_TLS_INSECURE", "false")
+MQTT_TLS_CA_CERTS = os.getenv("MQTT_TLS_CA_CERTS", "").strip()
 
 REALTIME_MQTT_HOST = os.getenv("REALTIME_MQTT_HOST", "localhost")
 REALTIME_MQTT_PORT = int(os.getenv("REALTIME_MQTT_PORT", "1883"))
@@ -27,7 +39,7 @@ SENSOR_COUNT = int(os.getenv("SENSOR_COUNT", "1"))
 SENSOR_SELECTION = os.getenv("SENSOR_SELECTION", "first").lower()
 SENSOR_IDS = os.getenv("SENSOR_IDS", "").strip()
 
-BACKFILL_ENABLED = os.getenv("BACKFILL_ENABLED", "false").lower() == "true"
+BACKFILL_ENABLED = env_bool("BACKFILL_ENABLED", "false")
 BACKFILL_FROM_YEAR = int(os.getenv("BACKFILL_FROM_YEAR", "2021"))
 BACKFILL_INTERVAL_SEC = int(os.getenv("BACKFILL_INTERVAL_SEC", "3600"))
 
@@ -140,7 +152,7 @@ def load_devices_from_map(path: str) -> list[Device]:
                     room_number=room_number,
                     building_name=building_name,
                     base_temperature=TEMPERATURE_BASE + sensor_offset(sensor_id, -2.0, 2.0),
-                    base_humidity=TEMPERATURE_BASE * 0 + HUMIDITY_BASE + sensor_offset(sensor_id, -8.0, 8.0),
+                    base_humidity=HUMIDITY_BASE + sensor_offset(sensor_id, -8.0, 8.0),
                     base_co2=CO2_BASE + sensor_offset(sensor_id, -120.0, 120.0),
                 )
             )
@@ -189,7 +201,7 @@ def generate_payload(device: Device, ts: datetime | None = None) -> dict:
     temperature = round(
         clamp(
             device.base_temperature + random.uniform(-TEMPERATURE_JITTER, TEMPERATURE_JITTER),
-            16,
+            0,
             35,
             )
     )
@@ -219,11 +231,37 @@ def generate_payload(device: Device, ts: datetime | None = None) -> dict:
     }
 
 
+def configure_auth_and_tls(client: mqtt.Client) -> None:
+    if MQTT_USERNAME:
+        client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+    if not MQTT_TLS_ENABLED:
+        return
+
+    if MQTT_TLS_INSECURE:
+        context = ssl._create_unverified_context()
+    else:
+        cafile = MQTT_TLS_CA_CERTS or None
+        if cafile and not os.path.exists(cafile):
+            raise FileNotFoundError(
+                f"MQTT_TLS_CA_CERTS points to missing file: {cafile}. "
+                "Install ca-certificates in the image or unset MQTT_TLS_CA_CERTS."
+            )
+        context = ssl.create_default_context(cafile=cafile)
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+
+    client.tls_set_context(context)
+    client.tls_insecure_set(MQTT_TLS_INSECURE)
+
+
 def create_client(client_id: str) -> mqtt.Client:
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id=client_id,
     )
+
+    configure_auth_and_tls(client)
 
     def on_connect(c, userdata, flags, reason_code, properties=None):
         print(f"[connect] connected, reason_code={reason_code}")
@@ -240,13 +278,13 @@ def create_client(client_id: str) -> mqtt.Client:
 
 
 def connect_with_retry(client: mqtt.Client, host: str, port: int) -> None:
-    while True:
+    while RUNNING:
         try:
-            print(f"[connect] trying {host}:{port}")
-            client.connect(host, port, keepalive=60)
+            print(f"[connect] trying {host}:{port} tls={MQTT_TLS_ENABLED} username_set={bool(MQTT_USERNAME)}")
+            client.connect(host, port, keepalive=MQTT_KEEPALIVE)
             return
         except Exception as exc:
-            print(f"[connect] failed: {exc}")
+            print(f"[connect] failed: {type(exc).__name__}: {exc}")
             time.sleep(2)
 
 
@@ -258,7 +296,7 @@ def publish_payload(client: mqtt.Client, device: Device, payload: dict) -> None:
     info.wait_for_publish()
 
     if info.rc != mqtt.MQTT_ERR_SUCCESS:
-        print(f"[publish] failed topic={topic} payload={payload_json}")
+        print(f"[publish] failed topic={topic} payload={payload_json} rc={info.rc}")
     else:
         print(f"[publish] topic={topic} payload={payload_json}")
 
@@ -316,6 +354,8 @@ def run_realtime(client: mqtt.Client, devices: list[Device]) -> None:
 def main() -> None:
     if MQTT_QOS not in (0, 1, 2):
         raise ValueError("MQTT_QOS must be 0, 1 or 2")
+    if MQTT_KEEPALIVE < 1:
+        raise ValueError("MQTT_KEEPALIVE must be > 0")
     if BACKFILL_INTERVAL_SEC < 1:
         raise ValueError("BACKFILL_INTERVAL_SEC must be > 0")
     if REALTIME_INTERVAL_SEC <= 0:
@@ -331,6 +371,11 @@ def main() -> None:
     print("[config] backfill_mqtt_host=", BACKFILL_MQTT_HOST)
     print("[config] backfill_mqtt_port=", BACKFILL_MQTT_PORT)
     print("[config] mqtt_qos=", MQTT_QOS)
+    print("[config] mqtt_keepalive=", MQTT_KEEPALIVE)
+    print("[config] mqtt_username_set=", bool(MQTT_USERNAME))
+    print("[config] mqtt_tls_enabled=", MQTT_TLS_ENABLED)
+    print("[config] mqtt_tls_insecure=", MQTT_TLS_INSECURE)
+    print("[config] mqtt_tls_ca_certs=", MQTT_TLS_CA_CERTS or "<system-default>")
     print("[config] sensor_map_file=", SENSOR_MAP_FILE)
     print("[config] total_devices_in_map=", len(all_devices))
     print("[config] selected_sensor_ids=", [d.sensor_id for d in devices])
