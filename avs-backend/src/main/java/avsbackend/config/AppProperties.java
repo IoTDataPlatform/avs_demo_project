@@ -2,43 +2,77 @@ package avsbackend.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.time.Duration;
-
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
 
     private final Redis redis = new Redis();
-    private final Sensor sensor = new Sensor();
 
     public Redis getRedis() {
         return redis;
     }
 
-    public Sensor getSensor() {
-        return sensor;
-    }
-
     public static class Redis {
-        private String keyspace = "room-current";
+        private final Keyspaces keyspaces = new Keyspaces();
 
-        public String getKeyspace() {
-            return keyspace;
-        }
-
-        public void setKeyspace(String keyspace) {
-            this.keyspace = keyspace;
+        public Keyspaces getKeyspaces() {
+            return keyspaces;
         }
     }
 
-    public static class Sensor {
-        private Duration offlineAfter = Duration.ofMinutes(2);
+    public static class Keyspaces {
+        private String globalSummary = "avs:summary";
+        private String roomLatest = "avs:room:latest";
+        private String roomAvg1m = "avs:room:avg:1m";
+        private String roomAvg1h = "avs:room:avg:1h";
+        private String roomAvg1d = "avs:room:avg:1d";
+        private String sensorLatest = "avs:sensor:latest";
 
-        public Duration getOfflineAfter() {
-            return offlineAfter;
+        public String getGlobalSummary() {
+            return globalSummary;
         }
 
-        public void setOfflineAfter(Duration offlineAfter) {
-            this.offlineAfter = offlineAfter;
+        public void setGlobalSummary(String globalSummary) {
+            this.globalSummary = globalSummary;
+        }
+
+        public String getRoomLatest() {
+            return roomLatest;
+        }
+
+        public void setRoomLatest(String roomLatest) {
+            this.roomLatest = roomLatest;
+        }
+
+        public String getRoomAvg1m() {
+            return roomAvg1m;
+        }
+
+        public void setRoomAvg1m(String roomAvg1m) {
+            this.roomAvg1m = roomAvg1m;
+        }
+
+        public String getRoomAvg1h() {
+            return roomAvg1h;
+        }
+
+        public void setRoomAvg1h(String roomAvg1h) {
+            this.roomAvg1h = roomAvg1h;
+        }
+
+        public String getRoomAvg1d() {
+            return roomAvg1d;
+        }
+
+        public void setRoomAvg1d(String roomAvg1d) {
+            this.roomAvg1d = roomAvg1d;
+        }
+
+        public String getSensorLatest() {
+            return sensorLatest;
+        }
+
+        public void setSensorLatest(String sensorLatest) {
+            this.sensorLatest = sensorLatest;
         }
     }
 }

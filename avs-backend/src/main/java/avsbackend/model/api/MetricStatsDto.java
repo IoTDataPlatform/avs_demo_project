@@ -1,9 +1,10 @@
 package avsbackend.model.api;
 
-public record ParamStatsDto(
+public record MetricStatsDto(
         Double avg,
         Double median,
         Double min,
         Double max,
         Double percentInNorm
-) {}
+) {
+}
