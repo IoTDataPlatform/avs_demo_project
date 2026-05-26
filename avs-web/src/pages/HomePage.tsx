@@ -38,6 +38,8 @@ function SearchBox({
 const SUMMARY_CLASS =
     "flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 hover:bg-muted/40 [&::-webkit-details-marker]:hidden"
 
+const POLL_INTERVAL_MS = 5_000
+
 export function HomePage() {
     const [overview, setOverview] = useState<OverviewResponse | null>(null)
     const [buildings, setBuildings] = useState<BuildingDto[]>([])
@@ -77,15 +79,17 @@ export function HomePage() {
 
     useEffect(() => {
         let cancelled = false
-        setRoomsLoading(true)
-
         const buildingId = selectedBuildingId === "all" ? undefined : selectedBuildingId
 
-        getRooms(buildingId, roomPeriod).then((response) => {
+        async function load() {
+            setRoomsLoading(true)
+            const response = await getRooms(buildingId, roomPeriod)
             if (cancelled) return
             setRooms(response.rooms)
             setRoomsLoading(false)
-        })
+        }
+
+        void load()
 
         return () => {
             cancelled = true
@@ -94,20 +98,52 @@ export function HomePage() {
 
     useEffect(() => {
         let cancelled = false
-        setSensorsLoading(true)
-
         const buildingId = selectedBuildingId === "all" ? undefined : selectedBuildingId
 
-        getSensors(sensorPeriod, buildingId).then((response) => {
+        async function load() {
+            setSensorsLoading(true)
+            const response = await getSensors(sensorPeriod, buildingId)
             if (cancelled) return
             setSensors(response.sensors)
             setSensorsLoading(false)
-        })
+        }
+
+        void load()
 
         return () => {
             cancelled = true
         }
     }, [sensorPeriod, selectedBuildingId])
+
+    useEffect(() => {
+        let cancelled = false
+        const buildingId = selectedBuildingId === "all" ? undefined : selectedBuildingId
+
+        async function refresh() {
+            if (document.hidden) return
+
+            const [overviewResult, roomsResult, sensorsResult] = await Promise.allSettled([
+                getOverview(),
+                getRooms(buildingId, roomPeriod),
+                getSensors(sensorPeriod, buildingId),
+            ])
+
+            if (cancelled) return
+
+            if (overviewResult.status === "fulfilled") setOverview(overviewResult.value)
+            if (roomsResult.status === "fulfilled") setRooms(roomsResult.value.rooms)
+            if (sensorsResult.status === "fulfilled") setSensors(sensorsResult.value.sensors)
+        }
+
+        const id = window.setInterval(() => {
+            void refresh()
+        }, POLL_INTERVAL_MS)
+
+        return () => {
+            cancelled = true
+            window.clearInterval(id)
+        }
+    }, [roomPeriod, sensorPeriod, selectedBuildingId])
 
     const visibleRooms = useMemo(() => {
         const needle = roomSearch.trim().toLowerCase()
@@ -249,10 +285,11 @@ export function HomePage() {
                         ) : sensorsByStatus.every((g) => g.items.length === 0) ? (
                             <div className="text-sm text-muted-foreground">Нет датчиков под текущие фильтры.</div>
                         ) : (
-                            sensorsByStatus
-                                .filter((group) => group.items.length > 0)
-                                .map((group) => (
-                                    <details key={group.status} className="group space-y-2">
+                            <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
+                                {sensorsByStatus
+                                    .filter((group) => group.items.length > 0)
+                                    .map((group) => (
+                                        <details key={group.status} className="group space-y-2">
                                         <summary className={SUMMARY_CLASS}>
                                             <div className="flex items-center gap-2">
                                                 <span aria-hidden className="text-xs text-muted-foreground transition-transform group-open:rotate-90">▶</span>
@@ -287,7 +324,8 @@ export function HomePage() {
                                             ))}
                                         </div>
                                     </details>
-                                ))
+                                ))}
+                            </div>
                         )}
                     </CardContent>
                 </Card>
@@ -308,7 +346,8 @@ export function HomePage() {
                         ) : roomsByBuildingAndStatus.length === 0 ? (
                             <div className="text-sm text-muted-foreground">Нет комнат под текущие фильтры.</div>
                         ) : (
-                            roomsByBuildingAndStatus.map((buildingGroup) => (
+                            <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-2">
+                                {roomsByBuildingAndStatus.map((buildingGroup) => (
                                 <details key={buildingGroup.buildingName} className="group space-y-2">
                                     <summary className={SUMMARY_CLASS}>
                                         <div className="flex items-center gap-2">
@@ -362,7 +401,8 @@ export function HomePage() {
                                             ))}
                                     </div>
                                 </details>
-                            ))
+                                ))}
+                            </div>
                         )}
                     </CardContent>
                 </Card>

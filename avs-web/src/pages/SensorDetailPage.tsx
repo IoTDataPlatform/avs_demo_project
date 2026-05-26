@@ -12,6 +12,8 @@ import {Button} from "@/components/ui/button"
 import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card"
 import {rangeForDays} from "@/lib/dateRange"
 
+const POLL_INTERVAL_MS = 5_000
+
 export function SensorDetailPage() {
     const {sensorId = ""} = useParams()
 
@@ -29,7 +31,44 @@ export function SensorDetailPage() {
 
     useEffect(() => {
         if (!sensorId) return
-        void getSensorCurrent(sensorId).then(setCurrent)
+        let cancelled = false
+
+        async function load() {
+            const data = await getSensorCurrent(sensorId)
+            if (cancelled) return
+            setCurrent(data)
+        }
+
+        void load()
+
+        return () => {
+            cancelled = true
+        }
+    }, [sensorId])
+
+    useEffect(() => {
+        if (!sensorId) return
+        let cancelled = false
+
+        async function refresh() {
+            if (document.hidden) return
+            try {
+                const data = await getSensorCurrent(sensorId)
+                if (cancelled) return
+                setCurrent(data)
+            } catch {
+                // ignore transient errors; next tick will retry
+            }
+        }
+
+        const id = window.setInterval(() => {
+            void refresh()
+        }, POLL_INTERVAL_MS)
+
+        return () => {
+            cancelled = true
+            window.clearInterval(id)
+        }
     }, [sensorId])
 
     useEffect(() => {

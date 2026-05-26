@@ -12,6 +12,8 @@ import {StatusBadge} from "@/components/common/StatusBadge"
 import {Button} from "@/components/ui/button"
 import {rangeForDays} from "@/lib/dateRange"
 
+const POLL_INTERVAL_MS = 5_000
+
 export function RoomDetailPage() {
     const {roomKey = ""} = useParams()
 
@@ -30,13 +32,51 @@ export function RoomDetailPage() {
 
     useEffect(() => {
         if (!roomKey) return
-        void Promise.all([
-            getRoomCurrent(roomKey),
-            getRoomAggregates(roomKey),
-        ]).then(([currentData, aggregatesData]) => {
+        let cancelled = false
+
+        async function load() {
+            const [currentData, aggregatesData] = await Promise.all([
+                getRoomCurrent(roomKey),
+                getRoomAggregates(roomKey),
+            ])
+            if (cancelled) return
             setCurrent(currentData)
             setAggregates(aggregatesData)
-        })
+        }
+
+        void load()
+
+        return () => {
+            cancelled = true
+        }
+    }, [roomKey])
+
+    useEffect(() => {
+        if (!roomKey) return
+        let cancelled = false
+
+        async function refresh() {
+            if (document.hidden) return
+
+            const [currentResult, aggregatesResult] = await Promise.allSettled([
+                getRoomCurrent(roomKey),
+                getRoomAggregates(roomKey),
+            ])
+
+            if (cancelled) return
+
+            if (currentResult.status === "fulfilled") setCurrent(currentResult.value)
+            if (aggregatesResult.status === "fulfilled") setAggregates(aggregatesResult.value)
+        }
+
+        const id = window.setInterval(() => {
+            void refresh()
+        }, POLL_INTERVAL_MS)
+
+        return () => {
+            cancelled = true
+            window.clearInterval(id)
+        }
     }, [roomKey])
 
     useEffect(() => {
