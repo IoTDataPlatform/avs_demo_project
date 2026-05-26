@@ -164,6 +164,7 @@ export type StatsResponse = {
 export type SensorListItem = {
   sensorId: string
   roomKey: string
+  buildingId: string
   buildingName: string
   roomNumber: string
   ts: string
@@ -176,18 +177,7 @@ export type SensorListItem = {
   overallAirStatus: OverallStatus
 }
 
-export type RoomStatusSource = {
-  roomKey: string
-  buildingId: string
-  buildingName: string
-  roomNumber: string
-  sensorId: string
-  ts: string
-  co2: number
-  temperature: number
-  humidity: number
-  co2Status: ParamStatus
-  temperatureStatus: ParamStatus
-  humidityStatus: ParamStatus
-  overallAirStatus: OverallStatus
+export type SensorListResponse = {
+  period: SnapshotPeriod
+  sensors: SensorListItem[]
 }

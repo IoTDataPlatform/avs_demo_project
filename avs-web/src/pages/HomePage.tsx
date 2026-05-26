@@ -4,17 +4,13 @@ import {Link} from "react-router-dom"
 import {
     getBuildings,
     getOverview,
-    getRoomAggregates,
     getRooms,
-    getRoomSensors,
-    getSensorCurrent,
-    getSensorStats,
+    getSensors,
 } from "@/api/client"
 import type {
     BuildingDto,
     OverviewResponse,
     RoomCardDto,
-    RoomStatusSource,
     SensorListItem,
     SnapshotPeriod,
 } from "@/api/types"
@@ -25,15 +21,7 @@ import {Card, CardContent, CardHeader, CardTitle} from "@/components/ui/card"
 import {Input} from "@/components/ui/input"
 import {Label} from "@/components/ui/label"
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select"
-import {
-    aggregateRoomStatus,
-    AIR_ORDER,
-    asRoomStatusSource,
-    asSensorListItem,
-    countStatuses,
-    sensorFromStatsBase,
-} from "@/lib/airQuality"
-import {rangeForDays, rangeForHours, rangeForMinutes} from "@/lib/dateRange"
+import {AIR_ORDER, countStatuses} from "@/lib/airQuality"
 
 function SearchBox({
                        value,
@@ -47,36 +35,37 @@ function SearchBox({
     return <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}/>
 }
 
+const SUMMARY_CLASS =
+    "flex cursor-pointer list-none items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 hover:bg-muted/40 [&::-webkit-details-marker]:hidden"
+
 export function HomePage() {
     const [overview, setOverview] = useState<OverviewResponse | null>(null)
     const [buildings, setBuildings] = useState<BuildingDto[]>([])
-    const [baseRooms, setBaseRooms] = useState<RoomCardDto[]>([])
+    const [rooms, setRooms] = useState<RoomCardDto[]>([])
+    const [sensors, setSensors] = useState<SensorListItem[]>([])
     const [roomPeriod, setRoomPeriod] = useState<SnapshotPeriod>("latest")
     const [sensorPeriod, setSensorPeriod] = useState<SnapshotPeriod>("latest")
     const [selectedBuildingId, setSelectedBuildingId] = useState<string>("all")
     const [roomSearch, setRoomSearch] = useState("")
     const [sensorSearch, setSensorSearch] = useState("")
-    const [roomsResolved, setRoomsResolved] = useState<RoomStatusSource[]>([])
-    const [sensorsResolved, setSensorsResolved] = useState<SensorListItem[]>([])
-    const [loading, setLoading] = useState(true)
+    const [initialLoading, setInitialLoading] = useState(true)
+    const [roomsLoading, setRoomsLoading] = useState(false)
+    const [sensorsLoading, setSensorsLoading] = useState(false)
 
     useEffect(() => {
         let cancelled = false
 
         async function loadBase() {
-            setLoading(true)
-            const [overviewData, buildingData, roomsData] = await Promise.all([
+            const [overviewData, buildingData] = await Promise.all([
                 getOverview(),
                 getBuildings(),
-                getRooms(),
             ])
 
             if (cancelled) return
 
             setOverview(overviewData)
             setBuildings(buildingData.buildings)
-            setBaseRooms(roomsData.rooms)
-            setLoading(false)
+            setInitialLoading(false)
         }
 
         void loadBase()
@@ -88,139 +77,57 @@ export function HomePage() {
 
     useEffect(() => {
         let cancelled = false
+        setRoomsLoading(true)
 
-        async function resolveRooms() {
-            if (!baseRooms.length) {
-                setRoomsResolved([])
-                return
-            }
+        const buildingId = selectedBuildingId === "all" ? undefined : selectedBuildingId
 
-            if (roomPeriod === "latest") {
-                setRoomsResolved(baseRooms.map(asRoomStatusSource))
-                return
-            }
-
-            const aggregated = await Promise.all(
-                baseRooms.map(async (room) => ({
-                    room,
-                    agg: await getRoomAggregates(room.roomKey),
-                })),
-            )
-
+        getRooms(buildingId, roomPeriod).then((response) => {
             if (cancelled) return
-
-            setRoomsResolved(
-                aggregated.map(({room, agg}) => aggregateRoomStatus(room, agg, roomPeriod)),
-            )
-        }
-
-        void resolveRooms()
+            setRooms(response.rooms)
+            setRoomsLoading(false)
+        })
 
         return () => {
             cancelled = true
         }
-    }, [baseRooms, roomPeriod])
+    }, [roomPeriod, selectedBuildingId])
 
     useEffect(() => {
         let cancelled = false
+        setSensorsLoading(true)
 
-        async function resolveSensors() {
-            if (!baseRooms.length) {
-                setSensorsResolved([])
-                return
-            }
+        const buildingId = selectedBuildingId === "all" ? undefined : selectedBuildingId
 
-            const roomSensors = await Promise.all(
-                baseRooms.map(async (room) => ({
-                    room,
-                    sensors: await getRoomSensors(room.roomKey),
-                })),
-            )
-
-            const sensorDescriptors = roomSensors.flatMap(({room, sensors}) =>
-                sensors.sensors.map((sensor) => ({
-                    sensorId: sensor.sensorId,
-                    roomKey: room.roomKey,
-                    buildingName: room.buildingName,
-                    roomNumber: room.roomNumber,
-                })),
-            )
-
-            if (sensorPeriod === "latest") {
-                const sensorCurrents = await Promise.all(
-                    sensorDescriptors.map(async (d) => getSensorCurrent(d.sensorId)),
-                )
-                if (cancelled) return
-                setSensorsResolved(sensorCurrents.map(asSensorListItem))
-                return
-            }
-
-            const range =
-                sensorPeriod === "1m"
-                    ? rangeForMinutes(1)
-                    : sensorPeriod === "1h"
-                        ? rangeForHours(1)
-                        : rangeForDays(1)
-
-            const sensorStats = await Promise.all(
-                sensorDescriptors.map(async (d) => ({
-                    ...d,
-                    stats: await getSensorStats(d.sensorId, range.from, range.to),
-                })),
-            )
-
+        getSensors(sensorPeriod, buildingId).then((response) => {
             if (cancelled) return
-
-            setSensorsResolved(
-                sensorStats.map((item) =>
-                    sensorFromStatsBase(
-                        item.sensorId,
-                        item.roomKey,
-                        item.buildingName,
-                        item.roomNumber,
-                        item.stats,
-                    ),
-                ),
-            )
-        }
-
-        void resolveSensors()
+            setSensors(response.sensors)
+            setSensorsLoading(false)
+        })
 
         return () => {
             cancelled = true
         }
-    }, [baseRooms, sensorPeriod])
+    }, [sensorPeriod, selectedBuildingId])
 
     const visibleRooms = useMemo(() => {
-        return roomsResolved.filter((room) => {
-            const matchesBuilding = selectedBuildingId === "all" || room.buildingId === selectedBuildingId
-            const needle = roomSearch.trim().toLowerCase()
-            const matchesSearch =
-                !needle ||
-                room.roomNumber.toLowerCase().includes(needle) ||
-                room.buildingName.toLowerCase().includes(needle) ||
-                room.roomKey.toLowerCase().includes(needle)
-
-            return matchesBuilding && matchesSearch
-        })
-    }, [roomsResolved, selectedBuildingId, roomSearch])
+        const needle = roomSearch.trim().toLowerCase()
+        if (!needle) return rooms
+        return rooms.filter((room) =>
+            room.roomNumber.toLowerCase().includes(needle) ||
+            room.buildingName.toLowerCase().includes(needle) ||
+            room.roomKey.toLowerCase().includes(needle),
+        )
+    }, [rooms, roomSearch])
 
     const visibleSensors = useMemo(() => {
-        return sensorsResolved.filter((sensor) => {
-            const buildingId =
-                buildings.find((b) => b.name === sensor.buildingName)?.id ?? "bld_unknown"
-            const matchesBuilding = selectedBuildingId === "all" || buildingId === selectedBuildingId
-
-            const needle = sensorSearch.trim().toLowerCase()
-            const matchesSearch =
-                !needle ||
-                sensor.sensorId.toLowerCase().includes(needle) ||
-                sensor.roomNumber.toLowerCase().includes(needle) ||
-                sensor.buildingName.toLowerCase().includes(needle)
-
-            return matchesBuilding && matchesSearch
-        })
-    }, [sensorsResolved, selectedBuildingId, sensorSearch, buildings])
+        const needle = sensorSearch.trim().toLowerCase()
+        if (!needle) return sensors
+        return sensors.filter((sensor) =>
+            sensor.sensorId.toLowerCase().includes(needle) ||
+            sensor.roomNumber.toLowerCase().includes(needle) ||
+            sensor.buildingName.toLowerCase().includes(needle),
+        )
+    }, [sensors, sensorSearch])
 
     const roomCounts = useMemo(() => countStatuses(visibleRooms), [visibleRooms])
     const sensorCounts = useMemo(() => countStatuses(visibleSensors), [visibleSensors])
@@ -233,19 +140,19 @@ export function HomePage() {
     }, [visibleSensors])
 
     const roomsByBuildingAndStatus = useMemo(() => {
-        const grouped = new Map<string, RoomStatusSource[]>()
+        const grouped = new Map<string, RoomCardDto[]>()
 
         for (const room of visibleRooms) {
-            const key = room.buildingName
-            const items = grouped.get(key) ?? []
+            const items = grouped.get(room.buildingName) ?? []
             items.push(room)
-            grouped.set(key, items)
+            grouped.set(room.buildingName, items)
         }
 
         return Array.from(grouped.entries())
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([buildingName, items]) => ({
                 buildingName,
+                count: items.length,
                 statuses: AIR_ORDER.map((status) => ({
                     status,
                     items: items.filter((room) => room.overallAirStatus === status),
@@ -337,41 +244,50 @@ export function HomePage() {
                             placeholder="Поиск по sensorId, комнате или зданию"
                         />
 
-                        {loading ? (
+                        {initialLoading || sensorsLoading ? (
                             <div>Загрузка…</div>
+                        ) : sensorsByStatus.every((g) => g.items.length === 0) ? (
+                            <div className="text-sm text-muted-foreground">Нет датчиков под текущие фильтры.</div>
                         ) : (
-                            sensorsByStatus.map((group) => (
-                                <div key={group.status} className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <StatusBadge status={group.status}/>
-                                        <span className="text-sm text-muted-foreground">{group.items.length} шт.</span>
-                                    </div>
+                            sensorsByStatus
+                                .filter((group) => group.items.length > 0)
+                                .map((group) => (
+                                    <details key={group.status} className="group space-y-2">
+                                        <summary className={SUMMARY_CLASS}>
+                                            <div className="flex items-center gap-2">
+                                                <span aria-hidden className="text-xs text-muted-foreground transition-transform group-open:rotate-90">▶</span>
+                                                <StatusBadge status={group.status}/>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {group.items.length} шт.
+                                                </span>
+                                            </div>
+                                        </summary>
 
-                                    <div className="space-y-2">
-                                        {group.items.map((sensor) => (
-                                            <Link
-                                                key={sensor.sensorId}
-                                                to={`/sensors/${encodeURIComponent(sensor.sensorId)}`}
-                                                className="block rounded-lg border border-border px-3 py-3 hover:bg-muted/40"
-                                            >
-                                                <div className="flex items-center justify-between gap-3">
-                                                    <div>
-                                                        <div className="font-medium">{sensor.sensorId}</div>
-                                                        <div className="text-sm text-muted-foreground">
-                                                            {sensor.buildingName} · ауд. {sensor.roomNumber}
+                                        <div className="space-y-2 pl-3 pt-2">
+                                            {group.items.map((sensor) => (
+                                                <Link
+                                                    key={sensor.sensorId}
+                                                    to={`/sensors/${encodeURIComponent(sensor.sensorId)}`}
+                                                    className="block rounded-lg border border-border px-3 py-3 hover:bg-muted/40"
+                                                >
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div>
+                                                            <div className="font-medium">{sensor.sensorId}</div>
+                                                            <div className="text-sm text-muted-foreground">
+                                                                {sensor.buildingName} · ауд. {sensor.roomNumber}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right text-sm">
+                                                            <div>CO₂: {sensor.co2.toFixed(1)}</div>
+                                                            <div>T: {sensor.temperature.toFixed(1)} °C</div>
+                                                            <div>H: {sensor.humidity.toFixed(1)} %</div>
                                                         </div>
                                                     </div>
-                                                    <div className="text-right text-sm">
-                                                        <div>CO₂: {sensor.co2.toFixed(1)}</div>
-                                                        <div>T: {sensor.temperature.toFixed(1)} °C</div>
-                                                        <div>H: {sensor.humidity.toFixed(1)} %</div>
-                                                    </div>
-                                                </div>
-                                            </Link>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    </details>
+                                ))
                         )}
                     </CardContent>
                 </Card>
@@ -387,45 +303,67 @@ export function HomePage() {
                             placeholder="Поиск по комнате, зданию или roomKey"
                         />
 
-                        {roomsByBuildingAndStatus.map((buildingGroup) => (
-                            <div key={buildingGroup.buildingName} className="space-y-3">
-                                <h3 className="text-base font-semibold">{buildingGroup.buildingName}</h3>
-
-                                {buildingGroup.statuses.map((statusGroup) => (
-                                    <div key={statusGroup.status} className="space-y-2">
+                        {initialLoading || roomsLoading ? (
+                            <div>Загрузка…</div>
+                        ) : roomsByBuildingAndStatus.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">Нет комнат под текущие фильтры.</div>
+                        ) : (
+                            roomsByBuildingAndStatus.map((buildingGroup) => (
+                                <details key={buildingGroup.buildingName} className="group space-y-2">
+                                    <summary className={SUMMARY_CLASS}>
                                         <div className="flex items-center gap-2">
-                                            <StatusBadge status={statusGroup.status}/>
-                                            <span
-                                                className="text-sm text-muted-foreground">{statusGroup.items.length} шт.</span>
+                                            <span aria-hidden className="text-xs text-muted-foreground transition-transform group-open:rotate-90">▶</span>
+                                            <span className="font-medium">{buildingGroup.buildingName}</span>
+                                            <span className="text-sm text-muted-foreground">
+                                                {buildingGroup.count} шт.
+                                            </span>
                                         </div>
+                                    </summary>
 
-                                        <div className="space-y-2">
-                                            {statusGroup.items.map((room) => (
-                                                <Link
-                                                    key={room.roomKey}
-                                                    to={`/rooms/${encodeURIComponent(room.roomKey)}`}
-                                                    className="block rounded-lg border border-border px-3 py-3 hover:bg-muted/40"
-                                                >
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <div>
-                                                            <div className="font-medium">Ауд. {room.roomNumber}</div>
-                                                            <div className="text-sm text-muted-foreground">
-                                                                {room.roomKey} · sensor {room.sensorId}
-                                                            </div>
+                                    <div className="space-y-2 pl-3 pt-2">
+                                        {buildingGroup.statuses
+                                            .filter((sg) => sg.items.length > 0)
+                                            .map((statusGroup) => (
+                                                <details key={statusGroup.status} className="group/inner space-y-2">
+                                                    <summary className={SUMMARY_CLASS}>
+                                                        <div className="flex items-center gap-2">
+                                                            <span aria-hidden className="text-xs text-muted-foreground transition-transform group-open/inner:rotate-90">▶</span>
+                                                            <StatusBadge status={statusGroup.status}/>
+                                                            <span className="text-sm text-muted-foreground">
+                                                                {statusGroup.items.length} шт.
+                                                            </span>
                                                         </div>
-                                                        <div className="text-right text-sm">
-                                                            <div>CO₂: {room.co2.toFixed(1)}</div>
-                                                            <div>T: {room.temperature.toFixed(1)} °C</div>
-                                                            <div>H: {room.humidity.toFixed(1)} %</div>
-                                                        </div>
+                                                    </summary>
+
+                                                    <div className="space-y-2 pl-3 pt-2">
+                                                        {statusGroup.items.map((room) => (
+                                                            <Link
+                                                                key={room.roomKey}
+                                                                to={`/rooms/${encodeURIComponent(room.roomKey)}`}
+                                                                className="block rounded-lg border border-border px-3 py-3 hover:bg-muted/40"
+                                                            >
+                                                                <div className="flex items-center justify-between gap-3">
+                                                                    <div>
+                                                                        <div className="font-medium">Ауд. {room.roomNumber}</div>
+                                                                        <div className="text-sm text-muted-foreground">
+                                                                            {room.roomKey} · sensor {room.sensorId}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right text-sm">
+                                                                        <div>CO₂: {room.co2.toFixed(1)}</div>
+                                                                        <div>T: {room.temperature.toFixed(1)} °C</div>
+                                                                        <div>H: {room.humidity.toFixed(1)} %</div>
+                                                                    </div>
+                                                                </div>
+                                                            </Link>
+                                                        ))}
                                                     </div>
-                                                </Link>
+                                                </details>
                                             ))}
-                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                        ))}
+                                </details>
+                            ))
+                        )}
                     </CardContent>
                 </Card>
             </section>

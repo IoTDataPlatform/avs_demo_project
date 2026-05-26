@@ -6,8 +6,10 @@ import type {
     RoomsResponse,
     SensorsResponse,
     SensorCurrentResponse,
+    SensorListResponse,
     SeriesResponse,
     SeriesStep,
+    SnapshotPeriod,
     StatsResponse,
 } from "@/api/types"
 
@@ -76,8 +78,18 @@ export async function getBuildings(): Promise<BuildingsResponse> {
     return fetchJson("/buildings")
 }
 
-export async function getRooms(buildingId?: string): Promise<RoomsResponse> {
-    return fetchJson("/rooms", { buildingId })
+export async function getRooms(
+    buildingId?: string,
+    period: SnapshotPeriod = "latest",
+): Promise<RoomsResponse> {
+    return fetchJson("/rooms", { buildingId, period })
+}
+
+export async function getSensors(
+    period: SnapshotPeriod = "latest",
+    buildingId?: string,
+): Promise<SensorListResponse> {
+    return fetchJson("/sensors", { period, buildingId })
 }
 
 export async function getRoomSensors(roomKey: string): Promise<SensorsResponse> {
