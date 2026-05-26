@@ -5,6 +5,13 @@ public final class RoomKeyCodec {
     private RoomKeyCodec() {
     }
 
+    public static String encode(String buildingName, String roomNumber) {
+        if (buildingName == null || buildingName.isBlank() || roomNumber == null || roomNumber.isBlank()) {
+            throw new IllegalArgumentException("buildingName and roomNumber must not be blank");
+        }
+        return buildingName + "|" + roomNumber;
+    }
+
     public static DecodedRoomKey decode(String roomKey) {
         if (roomKey == null || roomKey.isBlank()) {
             throw new IllegalArgumentException("roomKey must not be blank");

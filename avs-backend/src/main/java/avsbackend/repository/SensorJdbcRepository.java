@@ -102,6 +102,45 @@ public class SensorJdbcRepository {
                 .optional();
     }
 
+    public List<SensorAggRow> findAllSensorsAggregated(Instant from, Instant to, String buildingNameFilter) {
+        boolean hasBuilding = buildingNameFilter != null && !buildingNameFilter.isBlank();
+
+        String sql = """
+                SELECT sensor_id,
+                       building_name,
+                       room_number,
+                       CAST(AVG(co2) AS double precision)         AS co2_avg,
+                       CAST(AVG(temperature) AS double precision) AS temperature_avg,
+                       CAST(AVG(humidity) AS double precision)    AS humidity_avg,
+                       MAX(ts)                                    AS last_ts
+                FROM sensor_readings
+                WHERE ts BETWEEN :from AND :to
+                """
+                + (hasBuilding ? "  AND building_name = :buildingName\n" : "")
+                + """
+                GROUP BY sensor_id, building_name, room_number
+                ORDER BY building_name, room_number, sensor_id
+                """;
+
+        var spec = jdbcClient.sql(sql)
+                .param("from", toOffsetDateTime(from))
+                .param("to", toOffsetDateTime(to));
+
+        if (hasBuilding) {
+            spec = spec.param("buildingName", buildingNameFilter);
+        }
+
+        return spec.query((rs, rowNum) -> new SensorAggRow(
+                rs.getString("sensor_id"),
+                rs.getString("building_name"),
+                rs.getString("room_number"),
+                getDouble(rs, "co2_avg"),
+                getDouble(rs, "temperature_avg"),
+                getDouble(rs, "humidity_avg"),
+                rs.getTimestamp("last_ts").toInstant()
+        )).list();
+    }
+
     public Optional<StatsAggRow> getSensorStats(String sensorId, Instant from, Instant to) {
         return jdbcClient.sql(statsSql("""
                 WHERE sensor_id = :sensorId
@@ -181,6 +220,16 @@ public class SensorJdbcRepository {
             Double co2Avg,
             Double temperatureAvg,
             Double humidityAvg
+    ) {}
+
+    public record SensorAggRow(
+            String sensorId,
+            String buildingName,
+            String roomNumber,
+            Double co2Avg,
+            Double temperatureAvg,
+            Double humidityAvg,
+            Instant lastTs
     ) {}
 
     public record StatsAggRow(

@@ -25,8 +25,11 @@ public class DirectoryController {
     }
 
     @GetMapping("/rooms")
-    public RoomsResponse getRooms(@RequestParam(required = false) String buildingId) {
-        return directoryService.getRooms(buildingId);
+    public RoomsResponse getRooms(
+            @RequestParam(required = false) String buildingId,
+            @RequestParam(defaultValue = "latest") String period
+    ) {
+        return directoryService.getRooms(buildingId, period);
     }
 
     @GetMapping("/room-sensors")

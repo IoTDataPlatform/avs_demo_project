@@ -1,6 +1,7 @@
 package avsbackend.controller;
 
 import avsbackend.model.api.SensorCurrentResponse;
+import avsbackend.model.api.SensorListResponse;
 import avsbackend.model.api.SeriesResponse;
 import avsbackend.model.api.StatsResponse;
 import avsbackend.service.SensorService;
@@ -20,6 +21,14 @@ public class SensorController {
 
     public SensorController(SensorService sensorService) {
         this.sensorService = sensorService;
+    }
+
+    @GetMapping
+    public SensorListResponse list(
+            @RequestParam(defaultValue = "latest") String period,
+            @RequestParam(required = false) String buildingId
+    ) {
+        return sensorService.listAll(period, buildingId);
     }
 
     @GetMapping("/{sensorId}/current")
